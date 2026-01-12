@@ -146,7 +146,11 @@ class ControlPanel:
         # Tab 5: Calculator
         self.tab_calculator = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_calculator, text="Calculator")
-        
+
+        # Tab 5.5: Calibration 
+        self.tab_calibration = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_calibration, text="Calibration")
+
         # Tab 6: Diagram
         self.tab_diagram = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_diagram, text="Diagram")
@@ -190,6 +194,10 @@ class ControlPanel:
         
         # --- Calculator Tab Content ---
         self._create_calculator_tab(self.tab_calculator)
+
+        # --- Calibration Tab Content ---
+        self._create_calibration_tab(self.tab_calibration)
+
 
         # --- Diagram Tab Content ---
         self._create_diagram_tab(self.tab_diagram)
@@ -2309,3 +2317,137 @@ class ControlPanel:
             self.viz.update_annotations()
             self.viz.update_reference_planes()
             self.update_gui()
+    def _create_calibration_tab(self, parent):
+        # Frame for Data Selection
+        data_frame = ttk.LabelFrame(parent, text="1. Data Loading", padding="5")
+        data_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Folder Path
+        ttk.Label(data_frame, text="Data Folder:").pack(anchor=tk.W)
+        path_frame = ttk.Frame(data_frame)
+        path_frame.pack(fill=tk.X, pady=2)
+        
+        self.calib_path_var = tk.StringVar(value=os.path.join(os.path.dirname(__file__), "test_files", "pivot_calibration", "optical_tracker"))
+        ttk.Entry(path_frame, textvariable=self.calib_path_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        ttk.Button(path_frame, text="...", width=3, command=self.on_calib_browse).pack(side=tk.LEFT)
+        
+        # Load Button
+        self.btn_calib_load = ttk.Button(data_frame, text="Load Data", command=self.on_calib_load)
+        self.btn_calib_load.pack(fill=tk.X, pady=5)
+        
+        self.calib_status_label = ttk.Label(data_frame, text="Not Loaded", foreground="gray")
+        self.calib_status_label.pack(anchor=tk.W)
+        
+        # Frame for Calibration
+        calib_frame = ttk.LabelFrame(parent, text="2. Calibration", padding="5")
+        calib_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Target Transform Selector
+        ttk.Label(calib_frame, text="Target Transform:").pack(anchor=tk.W)
+        
+        transform_names = [t['name'] for t in self.viz.config['transforms']]
+        self.calib_target_var = tk.StringVar()
+        if transform_names: self.calib_target_var.set(transform_names[0])
+        
+        self.calib_target_combo = ttk.Combobox(calib_frame, textvariable=self.calib_target_var, values=transform_names, state="readonly")
+        self.calib_target_combo.pack(fill=tk.X, pady=2)
+        
+        self.btn_calibrate = ttk.Button(calib_frame, text="Run Pivot Calibration", command=self.on_calib_run)
+        self.btn_calibrate.pack(fill=tk.X, pady=5)
+        
+        # Frame for Visualization (Initially Disabled)
+        self.vis_frame = ttk.LabelFrame(parent, text="3. Visualization", padding="5")
+        self.vis_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Pose Index Control
+        idx_frame = ttk.Frame(self.vis_frame)
+        idx_frame.pack(fill=tk.X, pady=2)
+        
+        ttk.Label(idx_frame, text="Pose Index:").pack(side=tk.LEFT)
+        self.calib_idx_var = tk.IntVar(value=0)
+        self.calib_idx_spin = ttk.Spinbox(idx_frame, from_=0, to=0, textvariable=self.calib_idx_var, width=5)
+        self.calib_idx_spin.pack(side=tk.LEFT, padx=5)
+        
+        self.btn_calib_show = ttk.Button(idx_frame, text="Visualize Pose", command=self.on_calib_show_pose)
+        self.btn_calib_show.pack(side=tk.LEFT, padx=5)
+        
+        self.calib_vis_var = tk.BooleanVar(value=True)
+        self.chk_calib_vis = ttk.Checkbutton(self.vis_frame, text="Show Calibration Viz", variable=self.calib_vis_var, command=self.on_calib_vis_toggle)
+        self.chk_calib_vis.pack(anchor=tk.W, padx=5, pady=2)
+        
+        # Disable visualization initially
+        self._set_vis_state('disabled')
+
+        # Results
+        result_frame = ttk.LabelFrame(parent, text="Results", padding="5")
+        result_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        self.calib_result_text = tk.Text(result_frame, height=10, width=30, state='disabled', font=("TkFixedFont", 9))
+        self.calib_result_text.pack(fill=tk.BOTH, expand=True)
+
+    def on_calib_vis_toggle(self):
+        self.viz.calibration_manager.toggle_visibility(self.calib_vis_var.get())
+
+
+    def _set_vis_state(self, state):
+        for child in self.vis_frame.winfo_children():
+            try:
+                for grand in child.winfo_children():
+                    try:
+                        grand.configure(state=state)
+                    except tk.TclError:
+                        pass
+                child.configure(state=state)
+            except tk.TclError:
+                pass
+
+    def on_calib_browse(self):
+        folder = filedialog.askdirectory(initialdir=self.calib_path_var.get())
+        if folder:
+            self.calib_path_var.set(folder)
+
+    def on_calib_load(self):
+        folder = self.calib_path_var.get()
+        count = self.viz.calibration_manager.load_data(folder)
+
+        
+        if count > 0:
+            self.calib_status_label.config(text=f"Loaded {count} poses.", foreground="green")
+            self.calib_idx_spin.config(to=count-1)
+            # Reset
+            self.calib_idx_var.set(0)
+            self._set_vis_state('disabled') 
+        else:
+            self.calib_status_label.config(text="Load Failed (0 found)", foreground="red")
+
+    def on_calib_run(self):
+        target = self.calib_target_var.get()
+        self.calib_result_text.config(state='normal')
+        self.calib_result_text.delete(1.0, tk.END)
+        self.calib_result_text.insert(tk.END, "Running Calibration...\n")
+        self.calib_result_text.config(state='disabled')
+        self.root.update()
+        
+        v_t, v_pivot, rmse = self.viz.calibration_manager.run_calibration(target)
+
+        
+        self.calib_result_text.config(state='normal')
+        if v_t is not None:
+             res_str = f"SUCCESS\n\nRMSE: {rmse:.4f} mm\n"
+             res_str += f"v_tip (Device):\n{np.array2string(v_t, precision=2, suppress_small=True)}\n"
+             res_str += f"v_pivot (Tracker):\n{np.array2string(v_pivot, precision=2, suppress_small=True)}\n"
+             self.calib_result_text.insert(tk.END, res_str)
+             
+             # Enable Visualization
+             self._set_vis_state('normal')
+        else:
+             self.calib_result_text.insert(tk.END, "FAILED\nCheck logs.\n")
+             self._set_vis_state('disabled')
+        self.calib_result_text.config(state='disabled')
+
+    def on_calib_show_pose(self):
+        idx = self.calib_idx_var.get()
+        target = self.calib_target_var.get()
+        # Ensure method name matches manager (preview_pose)
+        self.viz.calibration_manager.preview_pose(idx)
+

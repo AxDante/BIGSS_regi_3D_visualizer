@@ -1,0 +1,61 @@
+logging_level: INFO
+recording_dir: "visualizer_outputs/recordings"
+
+frames:
+  - name: OpticalTracker
+    abbreviation: O
+    type: virtual
+    movable: false
+
+  - name: DeviceReference
+    abbreviation: D_Ref
+    type: virtual
+    movable: true
+
+  - name: PivotPoint
+    abbreviation: P
+    type: virtual
+    movable: false
+    # Initial Pivot Point (will be updated by Estimator)
+    # We can use a sphere to represent the result
+    paths:
+       # Using a generic sphere or just a frame/landmark for now.
+       # Visualizer logic will likely create a point actor manually.
+       pass: pass
+
+transforms:
+  - name: W_from_O
+    parent: World
+    child: OpticalTracker
+    initial_transform:
+      - [ 1.00000000e+00,  0.00000000e+00,  0.00000000e+00,  5.00000000e+02]
+      - [ 0.00000000e+00,  1.00000000e+00,  0.00000000e+00,  3.00000000e+02]
+      - [ 0.00000000e+00,  0.00000000e+00,  1.00000000e+00,  2.86223009e+02]
+      - [ 0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  1.00000000e+00]
+    
+  - name: O_from_D_Ref
+    parent: OpticalTracker
+    child: DeviceReference
+    # Initial transform - identity or something visible
+    initial_transform: 
+       - [1, 0, 0, 0]
+       - [0, 1, 0, 0]
+       - [0, 0, 1, 150]
+       - [0, 0, 0, 1]
+
+  - name: O_from_P
+    parent: OpticalTracker
+    child: PivotPoint
+    # Initial guess (will be overwritten by calibration)
+    initial_transform:
+       - [1, 0, 0, 200]
+       - [0, 1, 0, 230]
+       - [0, 0, 1, -50]
+       - [0, 0, 0, 1]
+
+vectors:
+  # This section defines vectors relative to frames.
+  # We will populate the v_tip vectors dynamically in code for each device pose,
+  # but we can define the "Ground Truth" or "Reference" vector here if needed.
+  # For now, let's keep it empty and manage vectors via the visualizer main loop.
+  pass: pass

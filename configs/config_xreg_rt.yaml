@@ -74,12 +74,12 @@ transforms:
   - name: O_from_PM
     parent: OpticalTracker
     child: PhantomMarker
-    path: "/home/pingcheng/bigss/bisss-surgery-3d-visualizer/O_from_PM.txt"
+    path: "/home/pingcheng/bigss/bisss-surgery-3d-visualizer/test_files/O_from_PM.txt"
 
   - name: O_from_CM
     parent: OpticalTracker
     child: CArmMarker
-    path: "/home/pingcheng/bigss/bisss-surgery-3d-visualizer/O_from_CM.txt"
+    path: "/home/pingcheng/bigss/bisss-surgery-3d-visualizer/test_files/O_from_CM.txt"
 
   - name: CM_from_CArmSource
     parent: CArmMarker

@@ -3,3 +3,5 @@ example/
 __pycache__/
 *.pyc
 example_data.zip
+calibration_debug/test_files/
+test_files/

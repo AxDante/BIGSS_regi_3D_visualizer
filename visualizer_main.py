@@ -19,6 +19,9 @@ from control_panel import ControlPanel
 from data_loaders import load_segmentation, load_landmarks
 import geo.core as kg
 import time 
+import test_calibration 
+from custom_vector import CustomVector
+from calibration_manager import CalibrationManager
 
 
 class ReferencePlane:
@@ -90,110 +93,7 @@ class ReferencePlane:
             if visible: self.actor.VisibilityOn()
             else: self.actor.VisibilityOff()
 
-class CustomVector:
-    def __init__(self, name, parent_name, landmark_label, landmark_object_name, plotter, visual_settings, object_map):
-        self.name = name
-        self.parent_name = parent_name
-        self.landmark_label = landmark_label
-        self.landmark_object_name = landmark_object_name
-        self.plotter = plotter
-        self.object_map = object_map
-        
-        # Visual Settings
-        self.visual_settings = visual_settings or {}
-        self.color = self.visual_settings.get('color', 'yellow')
-        self.opacity = self.visual_settings.get('opacity', 0.9)
-        self.line_width = self.visual_settings.get('line_width', 5) # Not used for arrow mesh, but good to have
-        self.label_size = self.visual_settings.get('label_size', 14)
-        self.label_color = self.visual_settings.get('label_color', self.color)
-        
-        self.actor = None
-        self.label_actor = None
-        self.current_vector = None
-        self.current_length = 0.0
-        self.start_pos = None
-        self.end_pos = None
-        
-    def update_transform(self, transform_map):
-        """Alias for update to satisfy dependent interface."""
-        # logging.info(f"[{self.name}] update_transform called")
-        self.update(transform_map)
 
-    def update(self, map_ignored=None):
-        # 1. Get Start Position (Parent Origin)
-        if self.parent_name == "World":
-            start_pos = np.array([0.0, 0.0, 0.0])
-        else:
-            parent = self.object_map.get(self.parent_name)
-            if not parent:
-                return # Parent not found
-            start_pos = parent.global_transform.t
-            
-        # 2. Get End Position (Landmark)
-        lm_obj = self.object_map.get(self.landmark_object_name)
-        if not lm_obj:
-            return # Landmark object not found
-            
-        end_pos = lm_obj.get_landmark_world_position(self.landmark_label)
-        
-        if end_pos is None:
-            # Landmark not found, hide actor if it exists
-            if self.actor: self.actor.VisibilityOff()
-            if self.label_actor: self.label_actor.VisibilityOff()
-            return # Landmark not found
-            
-        # Check if changed
-        if self.start_pos is not None and self.end_pos is not None:
-            if np.allclose(start_pos, self.start_pos, atol=1e-5) and \
-               np.allclose(end_pos, self.end_pos, atol=1e-5):
-                return # No change
-            
-        # 3. Draw Vector
-        vec = end_pos - start_pos
-        length = float(np.linalg.norm(vec))
-        
-        if length < 1e-6:
-            if self.actor: self.actor.VisibilityOff()
-            if self.label_actor: self.label_actor.VisibilityOff()
-            return
-            
-        direction = vec / length
-        
-        # Fixed dimensions for visibility
-        fixed_shaft_radius = 1.0
-        fixed_tip_radius = 3.0
-        fixed_tip_length = 10.0
-        
-        arrow_mesh = pv.Arrow(start=start_pos, direction=direction, scale=length,
-                        shaft_radius=fixed_shaft_radius/length,
-                        tip_radius=fixed_tip_radius/length,
-                        tip_length=fixed_tip_length/length)
-                        
-        if self.actor:
-            # Update existing actor
-            self.actor.mapper.dataset.copy_from(arrow_mesh)
-            self.actor.VisibilityOn()
-        else:
-            # Create new
-            self.actor = self.plotter.add_mesh(arrow_mesh, color=self.color, opacity=self.opacity, show_scalar_bar=False)
-        
-        # 4. Draw Label
-        midpoint = (start_pos + end_pos) / 2
-        
-        # Recreate label (2D, less expensive)
-        if self.label_actor:
-            self.plotter.remove_actor(self.label_actor)
-            
-        self.label_actor = self.plotter.add_point_labels(
-            [midpoint], [self.name],
-            font_size=self.label_size, text_color=self.label_color,
-            show_points=False, always_visible=True
-        )
-        
-        self.current_vector = vec
-        self.current_length = length
-        self.start_pos = start_pos
-        self.end_pos = end_pos
 
 
 
@@ -542,6 +442,257 @@ class SE3Visualizer:
         
         # Add Render Callback for Recording
         self.plotter.add_on_render_callback(self._on_render)
+
+        
+        # Calibration Manager
+        self.calibration_manager = CalibrationManager(self)
+
+
+    def load_calibration_data(self, folder_path):
+        """Loads calibration transforms from a folder."""
+        if not os.path.exists(folder_path):
+            logging.error(f"Calibration folder not found: {folder_path}")
+            return 0
+            
+        self.calibration_data = test_calibration.load_transforms(folder_path)
+        logging.info(f"Loaded {len(self.calibration_data)} calibration transforms.")
+        return len(self.calibration_data)
+
+    def _clear_calibration_ghosts(self):
+        """Removes temporary calibration objects from scene."""
+        # Cleanup based on the flat list of names we stored
+        for name in self.calibration_ghosts:
+            # Check if it's an object
+            obj = self.object_map.get(name)
+            if obj:
+                # Remove from hierarchy
+                if obj.parent:
+                    obj.parent.children.remove(obj)
+                # Cleanup actors
+                for actor in obj.frame_actors:
+                    self.plotter.remove_actor(actor)
+                if obj.origin_label_actor:
+                    self.plotter.remove_actor(obj.origin_label_actor)
+                    
+                self.objects.remove(obj)
+                del self.object_map[name]
+                
+                # Cleanup associated Transform Config & Actor (Green Arrow)
+                # We need to find the transform config where child == name
+                # Since we might have multiple, we check carefully
+                t_conf = next((t for t in self.config.get('transforms', []) if t.get('child') == name), None)
+                if t_conf:
+                    self.config['transforms'].remove(t_conf)
+                    t_name = t_conf['name']
+                    # Cleanup dependent actor
+                    if hasattr(self, 'dependent_actors') and t_name in self.dependent_actors:
+                        cache = self.dependent_actors[t_name]
+                        if cache['arrow']: self.plotter.remove_actor(cache['arrow'])
+                        if cache['label']: self.plotter.remove_actor(cache['label'])
+                        del self.dependent_actors[t_name]
+                continue
+            
+            # Check if it's a vector
+            vec = next((v for v in self.custom_vectors if v.name == name), None)
+            if vec:
+                if vec.actor: self.plotter.remove_actor(vec.actor)
+                if vec.label_actor: self.plotter.remove_actor(vec.label_actor)
+                self.custom_vectors.remove(vec)
+                
+        self.calibration_ghosts = [] # Flat list of all created names
+        self.calibration_ghost_groups = [] # List of dicts {obj_name, t_name, vec_name} by index
+
+    def _update_calibration_visibility(self):
+        """Updates visibility of all calibration artifacts based on state."""
+        # 1. Pivot Point & Vector (Global Toggle)
+        pivot = self.object_map.get("PivotPoint")
+        if pivot: pivot.set_visible(self.calibration_visible)
+        
+        v_pivot = next((v for v in self.custom_vectors if v.name == "v_pivot"), None)
+        if v_pivot:
+            if v_pivot.actor: v_pivot.actor.SetVisibility(self.calibration_visible)
+            if v_pivot.label_actor: v_pivot.label_actor.SetVisibility(self.calibration_visible)
+            
+        # 2. Ghost Groups (Index Selection + Global Toggle)
+        for i, group in enumerate(self.calibration_ghost_groups):
+            # Visible only if calibration is ON AND this is the selected index
+            is_visible = self.calibration_visible and (i == self.current_calibration_index)
+            
+            # Object
+            obj = self.object_map.get(group['obj_name'])
+            if obj:
+                # obj.set_visible controls axes
+                obj.set_visible(is_visible)
+                
+                # Transform (Green Arrow)
+                t_name = group['t_name']
+                if hasattr(self, 'dependent_actors') and t_name in self.dependent_actors:
+                    cache = self.dependent_actors[t_name]
+                    if cache['arrow']: cache['arrow'].SetVisibility(is_visible)
+                    if cache['label']: cache['label'].SetVisibility(is_visible)
+
+            # Vector (Yellow Arrow)
+            vec = next((v for v in self.custom_vectors if v.name == group['vec_name']), None)
+            if vec:
+                if vec.actor: vec.actor.SetVisibility(is_visible)
+                if vec.label_actor: vec.label_actor.SetVisibility(is_visible)
+                
+        self.plotter.render()
+
+    def toggle_calibration_visibility(self, visible):
+        """Toggles visibility of all calibration artifacts."""
+        self.calibration_visible = visible
+        self._update_calibration_visibility()
+
+    def preview_calibration_pose(self, transform_name, index):
+        """
+        Selects which ghost pose to visualize.
+        """
+        if not self.calibration_data:
+            return
+            
+        if index < 0 or index >= len(self.calibration_data):
+            return
+
+        self.current_calibration_index = index
+        self._update_calibration_visibility()
+        
+    def _create_all_ghosts(self, transform_name, v_t):
+        """
+        Generates ghost objects for all loaded calibration data.
+        """
+        target_obj = self.transform_map.get(transform_name)
+        if not target_obj or not target_obj.parent:
+            return
+
+        parent_obj = target_obj.parent
+        child_name = target_obj.name
+        
+        # Ensure CustomVector class is available
+        from visualizer_main import CustomVector
+
+        for i, pose_matrix in enumerate(self.calibration_data):
+            ghost_name = f"{child_name}_{i:02d}"
+            
+            # 1. Create Object
+            ghost_obj = TransformableObject(ghost_name, f"{target_obj.abbreviation}_{i}", self.plotter, movable=False)
+            ghost_obj.parent = parent_obj
+            parent_obj.children.append(ghost_obj)
+            self.objects.append(ghost_obj)
+            self.object_map[ghost_name] = ghost_obj
+            self.calibration_ghosts.append(ghost_name)
+            
+            # Set Pose
+            ghost_obj.local_transform = kg.FrameTransform(pose_matrix)
+            
+            # 2. Add Transform Config (Green Arrow)
+            t_name = f"{parent_obj.abbreviation}_from_{ghost_obj.abbreviation}"
+            t_conf = {
+                'name': t_name,
+                'parent': parent_obj.name,
+                'child': ghost_name,
+                'type': 'dependent',
+                'dynamic': True
+            }
+            self.config['transforms'].append(t_conf)
+            # t_name isn't in calibration_ghosts but managed via config removal logic in _clear
+            
+            # 3. Add Vector (Yellow Arrow)
+            vec_name = f"v_tip_{ghost_name}"
+            # Add Landmark
+            if not getattr(ghost_obj, 'landmarks', None):
+                ghost_obj.landmarks = {'labels': [], 'points': []}
+            ghost_obj.landmarks['labels'].append('Tip')
+            ghost_obj.landmarks['points'].append(v_t)
+            
+            vec = CustomVector(vec_name, ghost_name, "Tip", ghost_name, self.plotter, {'color': 'yellow'}, self.object_map)
+            self.custom_vectors.append(vec)
+            self.calibration_ghosts.append(vec_name)
+            
+            # Store Group
+            self.calibration_ghost_groups.append({
+                'obj_name': ghost_name,
+                't_name': t_name,
+                'vec_name': vec_name
+            }) 
+
+        # Force an update so `dependent_actors` get created by `update_scene` loop
+        # But we want them hidden initially.
+        self.update_scene()
+        
+        # Now force visibility update to hide them (since current index is -1)
+        self._update_calibration_visibility()
+
+    def run_pivot_calibration(self, transform_name, threshold=2.0):
+        """
+        Runs the RANSAC pivot calibration solver.
+        """
+        # Constraint Checks
+        if not self.calibration_data:
+            logging.error("Cannot calibrate: No data loaded.")
+            return None, None, 0.0
+            
+        if len(self.calibration_data) < 3:
+            logging.error(f"Cannot calibrate: Start with at least 3 files (loaded {len(self.calibration_data)})")
+            return None, None, 0.0
+
+        # Run Solver
+        v_t, v_pivot, rmse, inliers = test_calibration.solve_pivot_calibration_ransac(
+            self.calibration_data, threshold=threshold
+        )
+        
+        if v_t is None:
+            logging.error("Calibration failed.")
+            return None, None, 0.0
+
+        # Store Results
+        self.calibration_results = {
+            'v_t': v_t,
+            'v_pivot': v_pivot,
+            'rmse': rmse,
+            'inliers': inliers
+        }
+        
+        # Register v_pivot (Parent -> Pivot)
+        target_obj = self.transform_map.get(transform_name)
+        if not target_obj or not target_obj.parent:
+            logging.error(f"Target object for {transform_name} invalid.")
+            return v_t, v_pivot, rmse
+            
+        parent_obj = target_obj.parent
+        
+        # Add 'Pivot' landmark to Parent
+        if not getattr(parent_obj, 'landmarks', None):
+            parent_obj.landmarks = {'labels': [], 'points': []}
+            
+        # Update or Add Pivot landmark
+        if 'Pivot' in parent_obj.landmarks['labels']:
+            idx = parent_obj.landmarks['labels'].index('Pivot')
+            parent_obj.landmarks['points'][idx] = v_pivot
+        else:
+            parent_obj.landmarks['labels'].append('Pivot')
+            parent_obj.landmarks['points'].append(v_pivot)
+            
+        # Create/Update v_pivot vector
+        vec_name = "v_pivot"
+        existing_vec = next((v for v in self.custom_vectors if v.name == vec_name), None)
+        
+        if not existing_vec:
+            # Create new
+            from visualizer_main import CustomVector
+            vec = CustomVector(vec_name, parent_obj.name, "Pivot", parent_obj.name, self.plotter, {'color': 'yellow'}, self.object_map)
+            self.custom_vectors.append(vec)
+            
+        # Clear old ghosts and create NEW ones
+        self._clear_calibration_ghosts()
+        self._create_all_ghosts(transform_name, v_t)
+        
+        # Set initial visual state
+        self.current_calibration_index = 0 # Select first by default
+        self._update_calibration_visibility()
+        
+        self.update_scene()
+        return v_t, v_pivot, rmse
 
     def toggle_recording(self):
         """Toggle screen recording state."""
@@ -1173,7 +1324,9 @@ class SE3Visualizer:
 
     def _update_dependent_transforms(self):
         """Update visualization for dependent transforms."""
-        for t_config in (self.config.get('transforms') or []):
+        current_transforms = self.config.get('transforms') or []
+        
+        for t_config in current_transforms:
             # Allow 'dependent', 'dynamic_annotation', or any transform with dynamic: true
             t_type = t_config.get('type')
             is_dynamic = t_config.get('dynamic', False)
