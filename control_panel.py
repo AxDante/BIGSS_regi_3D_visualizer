@@ -142,20 +142,19 @@ class ControlPanel:
         self.tab_ref_planes = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_ref_planes, text="Ref Planes")
     
-        
         # Tab 5: Calculator
         self.tab_calculator = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_calculator, text="Calculator")
 
-        # Tab 5.5: Calibration 
+        # Tab 6: Calibration 
         self.tab_calibration = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_calibration, text="Calibration")
 
-        # Tab 6: Diagram
+        # Tab 7: Diagram
         self.tab_diagram = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_diagram, text="Diagram")
 
-        # Tab 7: Settings
+        # Tab 8: Settings
         self.tab_settings = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_settings, text="Settings")
         
@@ -190,7 +189,6 @@ class ControlPanel:
         # --- Ref Planes Tab Content ---
         self._create_ref_plane_tab(self.tab_ref_planes)
         
-
         
         # --- Calculator Tab Content ---
         self._create_calculator_tab(self.tab_calculator)
@@ -215,12 +213,6 @@ class ControlPanel:
             frame.pack(fill=tk.X, pady=2, padx=5)
             
             # 1. Toggle Frame (Axes/Label)
-            # We need a variable for this. We can attach it to the object or store in a dict.
-            # TransformableObject has 'visible' which usually toggles EVERYTHING. 
-            # We want specific toggles.
-            # Let's assume we can add methods to TransformableObject or modify properties directly.
-            # For now, let's use checkbuttons that call specific lambdas.
-            
             # Frame Visibility
             frame_var = tk.BooleanVar(value=True) # Default on?
             # Check actual state if possible
@@ -246,9 +238,6 @@ class ControlPanel:
                 chk_lm.pack(anchor=tk.W)
 
     def toggle_frame_visibility(self, obj, visible):
-        # We need to implement logic to hide just the axes/label
-        # Currently 'visible' toggles everything.
-        # We might need to act on `frame_actors` and `frame_label_actor` directly.
         obj.show_frame_actors = visible # Store state
         if visible:
             # Re-enable actors
@@ -292,9 +281,6 @@ class ControlPanel:
         for obj in self.viz.objects:
             if hasattr(obj, 'set_label_size'):
                 obj.set_label_size(size)
-                # Need to force render update if in interactive loop, 
-                # but main loop handles it via plotter.update() eventually.
-                # If stopped, might not update immediately, but usually fine.
                 
     def on_vector_thickness_change(self, val):
         scale = float(val)
@@ -511,9 +497,6 @@ class ControlPanel:
         
         self.vis_checkboxes = {}
     
-    # Removed 'model' toggle (Moved to Frames Tab)
-    # Removed 'landmarks' toggle (Moved to Frames Tab)
-    
         self.vis_checkboxes['vector'] = ttk.Checkbutton(frame, text="Show Transform Vector", variable=self.vis_vars['vector'], 
                        command=self.on_vis_change)
         self.vis_checkboxes['vector'].pack(anchor=tk.W)
@@ -632,15 +615,7 @@ class ControlPanel:
                 if child_obj == obj:
                     continue
 
-                # Determine if editable (movable)
-                # Note: We use the object's movable property
                 editable = child_obj.movable
-                
-                # Calculate transform matrix (Parent_from_Child)
-                # We need the transform relative to its parent, which is exactly what local_transform is
-                # IF the parent matches the config parent.
-                # In our system, t_config['name'] usually implies Parent_from_Child.
-                # And obj.local_transform IS Parent_from_Child.
                 
                 matrix = child_obj.local_transform.data
                 

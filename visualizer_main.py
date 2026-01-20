@@ -11,8 +11,7 @@ from datetime import datetime
 # Default to INFO, will be updated after config load
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Add the project root to the path so we can import geo
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from transformable_object import TransformableObject
 from control_panel import ControlPanel
@@ -616,11 +615,7 @@ class SE3Visualizer:
                 'vec_name': vec_name
             }) 
 
-        # Force an update so `dependent_actors` get created by `update_scene` loop
-        # But we want them hidden initially.
         self.update_scene()
-        
-        # Now force visibility update to hide them (since current index is -1)
         self._update_calibration_visibility()
 
     def run_pivot_calibration(self, transform_name, threshold=2.0):
@@ -1140,7 +1135,6 @@ class SE3Visualizer:
         if parent:
             # The FCSV/TXT points are in World Space (LPS).
             # The Parent is in a Local Rigid Frame (T_rigid).
-            # We need to transform points from World to Local Rigid.
             # P_local = inv(T_rigid) * P_world
             
             if hasattr(parent, 'initial_local_transform'):

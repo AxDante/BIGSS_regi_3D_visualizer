@@ -107,7 +107,6 @@ class CalibrationManager:
             del self.viz.object_map[name]
         
         # 2. Remove Transform Config (Green Arrow)
-        # 2. Remove Transform Config (Green Arrow)
         # Iterate to ensure we remove ALL pointing to this ghost (orphan cleanup)
         transforms_to_remove = [t for t in self.viz.config.get('transforms', []) if t.get('child') == name]
         
@@ -198,9 +197,6 @@ class CalibrationManager:
             
         # Reshow active ghost if enabled, or hide/clear
         if self.active_ghost_name:
-            # Simplest way: just re-preview current index or hide actors
-            # But we don't store current index here explicitly? 
-            # Actually, let's just use object set_visible
             obj = self.viz.object_map.get(self.active_ghost_name)
             if obj:
                 obj.set_visible(visible)

@@ -1,0 +1,33 @@
+logging_level: INFO
+recording_dir: "visualizer_outputs/recordings"
+
+external_config_dir: "/home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260120_154611_test_stepped_motion/case-108831/object_movement/FrameTransforms"
+
+frames:
+  #
+
+reference_planes:
+  # - name: ReferencePlane
+  #   parent: ReferencePlaneFrame
+  #   width: 300
+  #   length: 300
+  #   color: "blue"
+  #   opacity: 0.2
+
+
+transforms:
+  - name: W_from_DRRW
+    parent: World
+    child: DeepDRRWorld
+    initial_transform:
+      - [ 1.00000000e+00,  0.00000000e+00,  0.00000000e+00,  1.00000000e+01]
+      - [ 0.00000000e+00,  1.00000000e+00,  0.00000000e+00,  1.00000000e+01]
+      - [ 0.00000000e+00,  0.00000000e+00,  1.00000000e+00,  1.86223009e+02]
+      - [ 0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  1.00000000e+00]
+      
+
+vectors:
+  #
+
+annotations:
+  #
