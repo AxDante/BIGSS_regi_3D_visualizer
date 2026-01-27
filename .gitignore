@@ -5,3 +5,5 @@ __pycache__/
 example_data.zip
 calibration_debug/test_files/
 test_files/
+.vscode/
+tests/

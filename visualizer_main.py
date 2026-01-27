@@ -264,6 +264,67 @@ class SE3Visualizer:
 
         # Load Configuration
         self.config = self.load_config(config_path)
+
+        # Check for external config directory
+        if 'external_config_dir' in self.config:
+            ext_dir = self.config['external_config_dir']
+            # Resolve if relative
+            if not os.path.isabs(ext_dir):
+                ext_dir = os.path.abspath(os.path.join(os.path.dirname(config_path), ext_dir))
+            
+            if os.path.exists(ext_dir):
+                scene_struct_path = os.path.join(ext_dir, "scene_structure.yaml")
+                if os.path.exists(scene_struct_path):
+                    logging.info(f"Loading external scene structure from: {scene_struct_path}")
+                    ext_config = self.load_config(scene_struct_path)
+                    
+                    # Merge lists from external config
+                    for key in ['frames', 'transforms', 'reference_planes', 'vectors', 'annotations']:
+                        if key in ext_config and ext_config[key]:
+                            # Initialize if missing or None
+                            if key not in self.config or self.config[key] is None:
+                                self.config[key] = []
+                            
+                            # If items need path resolution (like models), we might need to adjust them here
+                            # or ensure they are absolute in the external file.
+                            
+                            items = ext_config[key]
+                            if key == 'frames':
+                                for item in items:
+                                    if 'paths' in item:
+                                        for p_key, p_val in item['paths'].items():
+                                            if p_val and not os.path.isabs(p_val):
+                                                item['paths'][p_key] = os.path.abspath(os.path.join(ext_dir, p_val))
+                                                
+                            elif key == 'transforms':
+                                # Check for Coordinate Conversion (RAS -> LPS)
+                                ext_coord = self.config.get('external_config_coordinate', 'LPS')
+                                if ext_coord == 'RAS':
+                                    logging.info("Applying RAS -> LPS conversion to external transforms.")
+                                    # M = diag([-1, -1, 1, 1])
+                                    M = np.diag([-1, -1, 1, 1])
+                                    
+                                    for item in items:
+                                        if 'initial_transform' in item:
+                                            # T_lps = M @ T_ras @ M
+                                            # Note: This checks if the transform is defined in RAS relative to a RAS parent?
+                                            # Or if the Frame is RAS?
+                                            # Usually "Everything is RAS".
+                                            # If P_ras = T_ras @ P_ras_child
+                                            # P_lps = M @ P_ras
+                                            # M @ P_ras = M @ T_ras @ M @ M @ P_ras_child (since M*M=I)
+                                            # P_lps = (M @ T_ras @ M) @ P_lps_child
+                                            # So yes, T_lps = M @ T_ras @ M
+                                            
+                                            T_ras = np.array(item['initial_transform'])
+                                            T_lps = M @ T_ras @ M
+                                            item['initial_transform'] = T_lps.tolist()
+
+                            self.config[key].extend(items)
+                else:
+                    logging.error(f"scene_structure.yaml not found in external directory: {ext_dir}")
+            else:
+                logging.error(f"External config directory not found: {ext_dir}")
         
         # Update Logging Level
         log_level_str = self.config.get('logging_level', 'INFO').upper()
@@ -352,7 +413,8 @@ class SE3Visualizer:
                 shape_type=shape_type,
                 shape_params=shape_params,
                 obj_type=obj_type,
-                movable=obj_config.get('movable', True)
+                movable=obj_config.get('movable', True),
+                segmentation_label=obj_config.get('segmentation_label')
             )
             self.objects.append(obj)
             self.object_map[name] = obj

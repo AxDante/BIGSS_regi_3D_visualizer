@@ -157,6 +157,10 @@ class ControlPanel:
         # Tab 8: Settings
         self.tab_settings = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_settings, text="Settings")
+
+        # Tab 9: Poses
+        self.tab_poses = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_poses, text="Poses")
         
         # --- Frames Tab Content ---
         self._create_frames_list(self.frames_scrollable_frame)
@@ -199,6 +203,9 @@ class ControlPanel:
 
         # --- Diagram Tab Content ---
         self._create_diagram_tab(self.tab_diagram)
+
+        # --- Poses Tab Content ---
+        self._create_poses_tab(self.tab_poses)
         
         # Start GUI update loop
         self.update_gui()
@@ -2426,3 +2433,139 @@ class ControlPanel:
         # Ensure method name matches manager (preview_pose)
         self.viz.calibration_manager.preview_pose(idx)
 
+    def _create_poses_tab(self, parent):
+        """Create controls for the Poses tab."""
+        frame = ttk.LabelFrame(parent, text="Pose Selection", padding="5")
+        frame.pack(fill=tk.BOTH, expand=True, pady=5, padx=5)
+        
+        # Check if external dir exists
+        ext_dir = self.viz.config.get('external_config_dir')
+        if not ext_dir:
+            ttk.Label(frame, text="No external_config_dir defined in config.", foreground="gray").pack(pady=20)
+            return
+
+        # Resolve if relative
+        if not os.path.isabs(ext_dir):
+            # Try to resolve relative to config path if possible, but here we might just assume absolute or resolve same way as main
+            # Ideally viz resolved it in config already? 
+            # In visualizer_main.py modification, we DID resolve it in self.config in place. 
+            # So self.viz.config['external_config_dir'] should be absolute now if we modified correctly.
+            # But wait, self.config assignment in visualizer_main adds resolved path to ext_dir LOCAL variable, 
+            # but relies on self.config['external_config_dir'] to be there. 
+            # Actually, I did NOT update self.config['external_config_dir'] with the absolute path in my previous edit.
+            # I just used 'ext_dir' local variable.
+            # So I should re-resolve it here or update visualizer_main to store it back.
+            # For robustness, I'll re-resolve it here relative to viz config path.
+            config_dir = os.path.dirname(os.path.abspath(self.viz.config_path))
+            ext_dir = os.path.abspath(os.path.join(config_dir, ext_dir))
+            
+        if not os.path.exists(ext_dir):
+            ttk.Label(frame, text=f"Directory not found:\n{ext_dir}", foreground="red").pack(pady=20)
+            return
+            
+        self.pose_json_dir = ext_dir
+        
+        # Scan for JSON files
+        json_files = glob.glob(os.path.join(ext_dir, "*.json"))
+        if not json_files:
+            ttk.Label(frame, text="No .json files found in external directory.", foreground="gray").pack(pady=20)
+            return
+
+        # Read the first JSON to get list of poses
+        pose_names = []
+        try:
+            with open(json_files[0], 'r') as f:
+                data = json.load(f)
+                # Assume list of dicts with 'pose_name'
+                if isinstance(data, list):
+                    pose_names = [item.get('pose_name') for item in data if 'pose_name' in item]
+        except Exception as e:
+            logging.error(f"Error reading poses from {json_files[0]}: {e}")
+            ttk.Label(frame, text=f"Error reading JSONs: {e}", foreground="red").pack(pady=20)
+            return
+            
+        if not pose_names:
+            ttk.Label(frame, text="No 'pose_name' found in JSON files.", foreground="gray").pack(pady=20)
+            return
+            
+        # Create Combo
+        ttk.Label(frame, text="Select Pose:").pack(anchor=tk.W, pady=5)
+        
+        self.pose_var = tk.StringVar()
+        self.pose_combo = ttk.Combobox(frame, textvariable=self.pose_var, values=pose_names, state="readonly", height=20)
+        self.pose_combo.pack(fill=tk.X, pady=5)
+        self.pose_combo.bind('<<ComboboxSelected>>', self.on_pose_selected)
+        
+        # Info Label
+        self.pose_info_label = ttk.Label(frame, text=f"Found {len(pose_names)} poses across {len(json_files)} files.", foreground="gray")
+        self.pose_info_label.pack(pady=10)
+
+    def on_pose_selected(self, event):
+        pose_name = self.pose_var.get()
+        if not pose_name or not hasattr(self, 'pose_json_dir'):
+            return
+            
+        logging.info(f"Applying pose: {pose_name}")
+        
+        json_files = glob.glob(os.path.join(self.pose_json_dir, "*.json"))
+        updated_count = 0
+        
+        for json_file in json_files:
+            # Extract transform name from filename (e.g. "CT_from_FL.json" -> "CT_from_FL")
+            filename = os.path.basename(json_file)
+            transform_name = os.path.splitext(filename)[0]
+            
+            # Find transform object
+            # Note: The visualizer might have loaded it.
+            # In visualizer_main, we loaded scene_structure.yaml from external dir.
+            # This should have created the transforms if they matched config.
+            
+            # We need to find the object that represents this transform.
+            # Usually transform map keys are transform names.
+            obj = self.viz.transform_map.get(transform_name)
+            
+            if not obj:
+                # Try finding by name in config in case map isn't populated for some reason (should be though)
+                continue
+                
+            # Read JSON to find the pose matrix
+            try:
+                with open(json_file, 'r') as f:
+                    data = json.load(f)
+                    # Find the item with matching pose_name
+                    pose_item = next((item for item in data if item.get('pose_name') == pose_name), None)
+                    
+                    if pose_item and 'matrix' in pose_item:
+                        matrix = np.array(pose_item['matrix'])
+                        
+                        # Check for Coordinate Conversion (RAS -> LPS)
+                        # The pose matrix in JSON is likely in the same coordinate system as the config
+                        ext_coord = self.viz.config.get('external_config_coordinate', 'LPS')
+                        if ext_coord == 'RAS':
+                            # T_lps = M @ T_ras @ M
+                            M = np.diag([-1, -1, 1, 1])
+                            matrix = M @ matrix @ M
+                        
+                        # Apply to object
+                        # DEBUG
+                        print(f"\n[DEBUG] Updating {obj.name} (Parent: {obj.parent.name if obj.parent else 'None'})")
+                        print(f"[DEBUG] Raw JSON Matrix Translation: {matrix[:3, 3]}")
+                        
+                        if ext_coord == 'RAS':
+                            # T_lps = M @ T_ras @ M
+                            M = np.diag([-1, -1, 1, 1])
+                            matrix = M @ matrix @ M
+                            print(f"[DEBUG] Converted (RAS->LPS) Translation: {matrix[:3, 3]}")
+
+                        
+                        obj.local_transform.data = matrix
+                        
+                        # Apply
+                        obj.update_transform(self.viz.transform_map)
+                        updated_count += 1
+                        
+            except Exception as e:
+                logging.error(f"Error applying pose from {filename}: {e}")
+        
+        logging.info(f"Updated {updated_count} transforms for pose {pose_name}")
+        self.viz.plotter.render()

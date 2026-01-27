@@ -17,7 +17,8 @@ class TransformableObject:
     def __init__(self, name, abbreviation, plotter, mesh_path=None, color="white", ct_origin=None, landmarks_path=None, segmentation_path=None, initial_transform=None, visual_settings=None,                 shape_type=None,
                  shape_params=None,
                  obj_type='model',
-                 movable=True):
+                 movable=True,
+                 segmentation_label=None):
         self.name = name
         self.abbreviation = abbreviation
         self.plotter = plotter
@@ -161,11 +162,15 @@ class TransformableObject:
             logging.debug(f"[{self.name}] Segmentation Coordinate System: RAS (converted to LPS)")
             logging.debug(f"[{self.name}] Loaded segmentation with labels: {seg_data['labels']}")
             
+            # Determine label: use provided label or default to 1
+            target_label = segmentation_label if segmentation_label is not None else 1
+            logging.info(f"[{self.name}] Using segmentation label: {target_label}")
+
             # Convert to mesh (World Coordinates)
             self.segmentation_mesh = segmentation_to_mesh(
                 seg_data['data'], 
                 seg_data['affine'], 
-                label=1
+                label=target_label
             )
             
             # Transform to Local Frame

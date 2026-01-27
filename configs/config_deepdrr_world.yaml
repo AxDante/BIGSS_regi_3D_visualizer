@@ -1,7 +1,8 @@
 logging_level: INFO
 recording_dir: "visualizer_outputs/recordings"
 
-external_config_dir: "/home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260120_154611_test_stepped_motion/case-108831/object_movement/FrameTransforms"
+external_config_dir: "/home/pingcheng/bigss/bisss-surgery-3d-visualizer/Mock_FrameTransforms_folder"
+external_config_coordinate: "RAS"
 
 frames:
   #
