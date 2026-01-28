@@ -14,11 +14,36 @@ import transform_parser
 
 
 class TransformableObject:
-    def __init__(self, name, abbreviation, plotter, mesh_path=None, color="white", ct_origin=None, landmarks_path=None, segmentation_path=None, initial_transform=None, visual_settings=None,                 shape_type=None,
+    def __init__(self, name, abbreviation, plotter, mesh_path=None, color="white", ct_origin=None, ct_path=None, landmarks_path=None, segmentation_path=None, initial_transform=None, visual_settings=None,                 shape_type=None,
                  shape_params=None,
                  obj_type='model',
                  movable=True,
                  segmentation_label=None):
+        
+        # --- Value Validation ---
+        valid_mesh_exts = ('.stl', '.ply', '.obj', '.vtp')
+        valid_vol_exts = ('.nii', '.nii.gz')
+
+        # Validate Mesh Path
+        if mesh_path:
+            if not mesh_path.lower().endswith(valid_mesh_exts):
+                logging.warning(f"[{name}] Invalid mesh extension for '{os.path.basename(mesh_path)}'. Expected {valid_mesh_exts}. Skipping mesh load.")
+                mesh_path = None
+        
+        # Validate CT Path
+        if ct_path:
+            if not ct_path.lower().endswith(valid_vol_exts):
+                logging.warning(f"[{name}] Invalid CT extension for '{os.path.basename(ct_path)}'. Expected {valid_vol_exts}. Skipping CT load.")
+                ct_path = None
+
+        # Validate Segmentation Path
+        if segmentation_path:
+            if not segmentation_path.lower().endswith(valid_vol_exts):
+                logging.warning(f"[{name}] Invalid segmentation extension for '{os.path.basename(segmentation_path)}'. Expected {valid_vol_exts}. Skipping segmentation load.")
+                segmentation_path = None
+        
+        self.ct_path = ct_path # Store CT path
+        # ------------------------
         self.name = name
         self.abbreviation = abbreviation
         self.plotter = plotter
@@ -54,7 +79,7 @@ class TransformableObject:
             self.initial_global_transform = initial_transform
             
             # Decompose: T = T_rigid @ S
-            # We assume S is diagonal scaling along local axes (columns of R)
+            # assume S is diagonal scaling along local axes (columns of R)
             R_full = initial_transform[:3, :3]
             self.initial_scale = np.linalg.norm(R_full, axis=0)
             self.initial_scale[self.initial_scale < 1e-9] = 1.0
@@ -78,7 +103,7 @@ class TransformableObject:
             
         # Calculate inverse RIGID transform to move World-space objects to Local Rigid space
         # Objects loaded from files (Mesh, Seg, Landmarks) are in World Coordinates (LPS)
-        # We want to store them in Local Rigid Frame (physically scaled but locally oriented)
+
         # T_rigid * P_local_rigid = P_world
         # P_local_rigid = inv(T_rigid) * P_world
         world_to_local = np.linalg.inv(self.local_transform.data)
@@ -430,13 +455,6 @@ class TransformableObject:
                 if should_show_model and self.show_segmentation: self.segmentation_actor.VisibilityOn()
                 else: self.segmentation_actor.VisibilityOff()
 
-            # Enforce Visibility for Landmarks (moved from visual_update_needed)
-            # This ensures toggle works even if no motion
-            # Note: _update_landmark_transforms handles basic visibility but forceful toggle needs Check
-            # Actually _update_landmark_transforms (called above) checks show_landmarks.
-            # But we should call it if visibility changed but transform didn't.
-            # For now, simplistic approach:
-             
             for child in self.children:
                 child.update_transform(transform_map)
                 

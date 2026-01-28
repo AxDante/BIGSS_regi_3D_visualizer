@@ -982,17 +982,9 @@ class ControlPanel:
             sdd = intrinsics.get('source_to_detector_distance', 1000.0) # Default 1000mm
             
             # Identify Active Reference Plane
-            # We assume the user hasn't changed the selection since generation/refresh
             current_plane_sel = self.ref_plane_var.get()
             ref_plane_obj = None
             if current_plane_sel:
-                # Find the object corresponding to the reference plane
-                # Note: ReferencePlane class is a wrapper, but it has an actor.
-                # However, for parenting we need a TransformableObject.
-                # The ReferencePlane wrapper doesn't inherit from TransformableObject.
-                # But the config defines "DynamicReferencePlaneFrame1" etc. which ARE TransformableObjects.
-                # We need to find the TransformableObject that represents the frame of this plane.
-                
                 # Look up in config to find the parent frame of the selected plane
                 for p_conf in self.viz.config.get('reference_planes', []):
                     if p_conf['name'] == current_plane_sel:
@@ -2446,16 +2438,6 @@ class ControlPanel:
 
         # Resolve if relative
         if not os.path.isabs(ext_dir):
-            # Try to resolve relative to config path if possible, but here we might just assume absolute or resolve same way as main
-            # Ideally viz resolved it in config already? 
-            # In visualizer_main.py modification, we DID resolve it in self.config in place. 
-            # So self.viz.config['external_config_dir'] should be absolute now if we modified correctly.
-            # But wait, self.config assignment in visualizer_main adds resolved path to ext_dir LOCAL variable, 
-            # but relies on self.config['external_config_dir'] to be there. 
-            # Actually, I did NOT update self.config['external_config_dir'] with the absolute path in my previous edit.
-            # I just used 'ext_dir' local variable.
-            # So I should re-resolve it here or update visualizer_main to store it back.
-            # For robustness, I'll re-resolve it here relative to viz config path.
             config_dir = os.path.dirname(os.path.abspath(self.viz.config_path))
             ext_dir = os.path.abspath(os.path.join(config_dir, ext_dir))
             
@@ -2516,16 +2498,9 @@ class ControlPanel:
             transform_name = os.path.splitext(filename)[0]
             
             # Find transform object
-            # Note: The visualizer might have loaded it.
-            # In visualizer_main, we loaded scene_structure.yaml from external dir.
-            # This should have created the transforms if they matched config.
-            
-            # We need to find the object that represents this transform.
-            # Usually transform map keys are transform names.
             obj = self.viz.transform_map.get(transform_name)
             
             if not obj:
-                # Try finding by name in config in case map isn't populated for some reason (should be though)
                 continue
                 
             # Read JSON to find the pose matrix
@@ -2546,18 +2521,6 @@ class ControlPanel:
                             M = np.diag([-1, -1, 1, 1])
                             matrix = M @ matrix @ M
                         
-                        # Apply to object
-                        # DEBUG
-                        print(f"\n[DEBUG] Updating {obj.name} (Parent: {obj.parent.name if obj.parent else 'None'})")
-                        print(f"[DEBUG] Raw JSON Matrix Translation: {matrix[:3, 3]}")
-                        
-                        if ext_coord == 'RAS':
-                            # T_lps = M @ T_ras @ M
-                            M = np.diag([-1, -1, 1, 1])
-                            matrix = M @ matrix @ M
-                            print(f"[DEBUG] Converted (RAS->LPS) Translation: {matrix[:3, 3]}")
-
-                        
                         obj.local_transform.data = matrix
                         
                         # Apply
@@ -2568,4 +2531,47 @@ class ControlPanel:
                 logging.error(f"Error applying pose from {filename}: {e}")
         
         logging.info(f"Updated {updated_count} transforms for pose {pose_name}")
+        
+        # --- DEBUG: Print Geometries ---
+        print("\n=== Geometry Debug (World Coordinates) ===")
+        
+        # Helper to get pos
+        def get_pos(name):
+            if name in self.viz.object_map:
+                p = self.viz.object_map[name].global_transform.t
+                return f"[{p[0]:.2f}, {p[1]:.2f}, {p[2]:.2f}]"
+            return "N/A"
+            
+        print(f"CArmS (Source):   {get_pos('CArmSource')}")
+        print(f"CArmI (Isocenter):{get_pos('CArmIsocenter')}")
+        print(f"CArmD (Detector): {get_pos('CArmDetector')}")
+        
+        # Anatomy
+        if 'CTvolume' in self.viz.object_map:
+            ct = self.viz.object_map['CTvolume']
+            print(f"CT Origin:        {get_pos('CTvolume')}")
+            
+            # Print Volume Center (Segmentation Centroid in World)
+            if ct.segmentation_mesh:
+                # Mesh Center in Local Frame
+                local_center = np.array(ct.segmentation_mesh.center)
+                # Transform to Global
+                if ct._cached_global_transform is not None:
+                     M = ct._cached_global_transform.data
+                else: 
+                     M = ct.global_transform.data
+                     
+                world_center = (M @ np.append(local_center, 1.0))[:3]
+                print(f"Volume Center:    [{world_center[0]:.2f}, {world_center[1]:.2f}, {world_center[2]:.2f}]")
+            
+            # Print PEL-c if available
+            pel_c = ct.get_landmark_world_position('PEL-c')
+            if pel_c is not None:
+                print(f"PEL-c Landmark:   [{pel_c[0]:.2f}, {pel_c[1]:.2f}, {pel_c[2]:.2f}]")
+            else:
+                 print("PEL-c Landmark:   Not Found")
+        
+        print("========================================\n")
+        # -------------------------------
+
         self.viz.plotter.render()

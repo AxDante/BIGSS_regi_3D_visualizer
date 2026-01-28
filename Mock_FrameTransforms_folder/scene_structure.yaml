@@ -6,9 +6,9 @@ frames:
   abbreviation: CT
   type: model
   paths:
-    model: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_171632_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/background_ct.nii.gz
-    segmentation: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_171632_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/background_seg.nii.gz
-    landmarks: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_171632_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/background_landmarks.fcsv
+    model: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_195046_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/background_ct.nii.gz
+    segmentation: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_195046_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/background_seg.nii.gz
+    landmarks: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_195046_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/background_landmarks.fcsv
 - name: CArmSource
   abbreviation: CArmS
   type: virtual
@@ -24,18 +24,18 @@ frames:
   description: Left femoral bone
   segmentation_label: 2
   paths:
-    model: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_171632_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/femur_left_ct.nii.gz
-    segmentation: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_171632_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/femur_left_seg.nii.gz
-    landmarks: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_171632_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/femur_left_landmarks.fcsv
+    model: ''
+    segmentation: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_195046_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/femur_left_seg.nii.gz
+    landmarks: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_195046_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/femur_left_landmarks.fcsv
 - name: femur_right
   abbreviation: FR
   type: model
   description: Right femoral bone
   segmentation_label: 3
   paths:
-    model: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_171632_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/femur_right_ct.nii.gz
-    segmentation: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_171632_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/femur_right_seg.nii.gz
-    landmarks: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_171632_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/femur_right_landmarks.fcsv
+    model: ''
+    segmentation: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_195046_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/femur_right_seg.nii.gz
+    landmarks: /home/pingcheng/bigss/bigss-deepdrr-utils/examples/outputs/20260127_195046_stepped_motion_pelvis_and_femur/case-108831/object_movement/data/femur_rotation_stepped/femur_right_landmarks.fcsv
 transforms:
 - name: DRRW_from_CT
   parent: DeepDRRWorld
@@ -52,6 +52,7 @@ transforms:
 # - name: CArmS_from_CArmD
 #   parent: CArmSource
 #   child: CArmDetector
+#   type: 
 - name: CT_from_FL
   parent: CTvolume
   child: femur_left

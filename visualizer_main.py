@@ -306,16 +306,6 @@ class SE3Visualizer:
                                     
                                     for item in items:
                                         if 'initial_transform' in item:
-                                            # T_lps = M @ T_ras @ M
-                                            # Note: This checks if the transform is defined in RAS relative to a RAS parent?
-                                            # Or if the Frame is RAS?
-                                            # Usually "Everything is RAS".
-                                            # If P_ras = T_ras @ P_ras_child
-                                            # P_lps = M @ P_ras
-                                            # M @ P_ras = M @ T_ras @ M @ M @ P_ras_child (since M*M=I)
-                                            # P_lps = (M @ T_ras @ M) @ P_lps_child
-                                            # So yes, T_lps = M @ T_ras @ M
-                                            
                                             T_ras = np.array(item['initial_transform'])
                                             T_lps = M @ T_ras @ M
                                             item['initial_transform'] = T_lps.tolist()
@@ -357,15 +347,12 @@ class SE3Visualizer:
             # Resolve paths relative to project root
             model_path = os.path.join(project_root, paths['model']) if paths.get('model') else None
             seg_path = os.path.join(project_root, paths['segmentation']) if paths.get('segmentation') else None
-            landmarks_path = os.path.join(project_root, paths['landmarks']) if paths.get('landmarks') else None
+            lm_path = os.path.join(project_root, paths['landmarks']) if paths.get('landmarks') else None
+            ct_path = os.path.join(project_root, paths['ct']) if paths.get('ct') else None
             
-            # Load segmentation to get affine and origin
+            # Affine and Origin defaults
             affine = None
             origin = None
-            if seg_path and os.path.exists(seg_path):
-                seg_data = load_segmentation(seg_path)
-                affine = seg_data['affine']
-                origin = seg_data['origin']
             
             visual_settings = obj_config.get('visual_settings', {})
             
@@ -392,7 +379,9 @@ class SE3Visualizer:
                     affine = np.eye(4)
                 # Ensure no paths are tried to be loaded
                 seg_path = None
-                landmarks_path = None
+                lm_path = None
+                ct_path = None
+                model_path = None
                 
             elif obj_type == 'model':
                 # Existing logic for loading from paths
@@ -403,10 +392,11 @@ class SE3Visualizer:
                 abbr,
                 self.plotter,
 
-                mesh_path=None, # Disable loading STL meshes, use segmentation or basic shapes
+                mesh_path=model_path,
                 color=obj_config.get('color', 'lightgray'),
                 ct_origin=origin,
-                landmarks_path=landmarks_path,
+                ct_path=ct_path,
+                landmarks_path=lm_path,
                 segmentation_path=seg_path,
                 initial_transform=affine,
                 visual_settings=visual_settings,
