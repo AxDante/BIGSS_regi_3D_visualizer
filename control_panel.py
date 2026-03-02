@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 import numpy as np
 import geo.core as kg
 import transform_parser
@@ -63,6 +63,9 @@ class ControlPanel:
             self.rec_status_label.config(text="● REC", foreground="red")
         else:
             self.rec_status_label.config(text="○ REC", foreground="gray")
+            if filename:
+                # Show popup
+                messagebox.showinfo("Recording Complete", f"Saved to:\n{filename}")
 
     def create_widgets(self):
         # Top Status Bar
@@ -2454,124 +2457,149 @@ class ControlPanel:
             return
 
         # Read the first JSON to get list of poses
-        pose_names = []
+        raw_pose_names = []
         try:
             with open(json_files[0], 'r') as f:
                 data = json.load(f)
-                # Assume list of dicts with 'pose_name'
                 if isinstance(data, list):
-                    pose_names = [item.get('pose_name') for item in data if 'pose_name' in item]
+                    raw_pose_names = [item.get('pose_name') for item in data if 'pose_name' in item]
         except Exception as e:
             logging.error(f"Error reading poses from {json_files[0]}: {e}")
             ttk.Label(frame, text=f"Error reading JSONs: {e}", foreground="red").pack(pady=20)
             return
             
-        if not pose_names:
+        if not raw_pose_names:
             ttk.Label(frame, text="No 'pose_name' found in JSON files.", foreground="gray").pack(pady=20)
             return
             
-        # Create Combo
-        ttk.Label(frame, text="Select Pose:").pack(anchor=tk.W, pady=5)
+        # --- Parse Poses & Steps ---
+        self.pose_data = {}
+        pattern = re.compile(r"^(.*)_step_(\d+)$")
         
+        for name in raw_pose_names:
+            match = pattern.match(name)
+            if match:
+                base = match.group(1)
+                step = match.group(2)
+                if base not in self.pose_data:
+                    self.pose_data[base] = set()
+                self.pose_data[base].add(step)
+            else:
+                if name not in self.pose_data:
+                    self.pose_data[name] = set()
+                self.pose_data[name].add("default")
+        
+        # Convert sets to sorted lists
+        sorted_bases = sorted(self.pose_data.keys())
+        for base in sorted_bases:
+            # Sort steps: "00", "01", "10" works with strings, but "2" vs "10" needs care.
+            # Assuming padded digits "00", "01" which sort alphabetically fine.
+            self.pose_data[base] = sorted(list(self.pose_data[base]))
+
+        if not sorted_bases:
+             ttk.Label(frame, text="No valid poses parsed.", foreground="gray").pack(pady=20)
+             return
+
+        # --- UI Controls ---
+        
+        # Pose Selector
+        ttk.Label(frame, text="Select C-Arm Pose:").pack(anchor=tk.W, pady=(5, 0))
         self.pose_var = tk.StringVar()
-        self.pose_combo = ttk.Combobox(frame, textvariable=self.pose_var, values=pose_names, state="readonly", height=20)
+        self.pose_combo = ttk.Combobox(frame, textvariable=self.pose_var, values=sorted_bases, state="readonly", height=15)
         self.pose_combo.pack(fill=tk.X, pady=5)
-        self.pose_combo.bind('<<ComboboxSelected>>', self.on_pose_selected)
+        self.pose_combo.bind('<<ComboboxSelected>>', self.on_pose_combo_changed)
+        
+        # Step Selector
+        self.step_frame = ttk.Frame(frame)
+        self.step_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(self.step_frame, text="Select Anatomy Movement Step:").pack(anchor=tk.W, pady=(5, 0))
+        self.step_var = tk.StringVar()
+        self.step_combo = ttk.Combobox(self.step_frame, textvariable=self.step_var, state="readonly")
+        self.step_combo.pack(fill=tk.X, pady=5)
+        self.step_combo.bind('<<ComboboxSelected>>', self.on_step_combo_changed)
         
         # Info Label
-        self.pose_info_label = ttk.Label(frame, text=f"Found {len(pose_names)} poses across {len(json_files)} files.", foreground="gray")
+        self.pose_info_label = ttk.Label(frame, text=f"Found {len(sorted_bases)} poses in {len(json_files)} files.", foreground="gray")
         self.pose_info_label.pack(pady=10)
 
-    def on_pose_selected(self, event):
-        pose_name = self.pose_var.get()
-        if not pose_name or not hasattr(self, 'pose_json_dir'):
+        # --- Default Initialization: Pose 000 Step 00 ---
+        default_pose = "pose_000"
+        default_step = "00"
+        
+        # Check if default exists
+        if default_pose in self.pose_data:
+             self.pose_var.set(default_pose)
+             self._update_step_list(default_pose)
+             
+             steps = self.pose_data[default_pose]
+             if default_step in steps:
+                 self.step_var.set(default_step)
+             elif steps:
+                 self.step_var.set(steps[0])
+                 
+             # Trigger initial load
+             self.apply_pose(self.pose_var.get(), self.step_var.get())
+
+    def _update_step_list(self, pose_name):
+        steps = self.pose_data.get(pose_name, [])
+        self.step_combo['values'] = steps
+        if steps:
+            if self.step_var.get() not in steps:
+                 self.step_var.set(steps[0])
+            self.step_combo.state(['!disabled'])
+        else:
+            self.step_var.set("")
+            self.step_combo.state(['disabled'])
+
+    def on_pose_combo_changed(self, event):
+        new_pose = self.pose_var.get()
+        self._update_step_list(new_pose)
+        self.apply_pose(new_pose, self.step_var.get())
+
+    def on_step_combo_changed(self, event):
+        self.apply_pose(self.pose_var.get(), self.step_var.get())
+
+    def apply_pose(self, pose_base, step_suffix):
+        if not pose_base or not hasattr(self, 'pose_json_dir'):
             return
             
-        logging.info(f"Applying pose: {pose_name}")
+        if step_suffix and step_suffix != "default":
+             full_pose_name = f"{pose_base}_step_{step_suffix}"
+        else:
+             full_pose_name = pose_base
+             
+        logging.info(f"Applying pose: {full_pose_name}")
         
         json_files = glob.glob(os.path.join(self.pose_json_dir, "*.json"))
         updated_count = 0
         
         for json_file in json_files:
-            # Extract transform name from filename (e.g. "CT_from_FL.json" -> "CT_from_FL")
             filename = os.path.basename(json_file)
             transform_name = os.path.splitext(filename)[0]
-            
-            # Find transform object
             obj = self.viz.transform_map.get(transform_name)
             
-            if not obj:
-                continue
+            if not obj: continue
                 
-            # Read JSON to find the pose matrix
             try:
                 with open(json_file, 'r') as f:
                     data = json.load(f)
-                    # Find the item with matching pose_name
-                    pose_item = next((item for item in data if item.get('pose_name') == pose_name), None)
+                    pose_item = next((item for item in data if item.get('pose_name') == full_pose_name), None)
                     
                     if pose_item and 'matrix' in pose_item:
-                        matrix = np.array(pose_item['matrix'])
+                         matrix = np.array(pose_item['matrix'])
+                         
+                         # Check for Coordinate Conversion
+                         ext_coord = self.viz.config.get('external_config_coordinate', 'LPS')
+                         if ext_coord == 'RAS':
+                              M = np.diag([-1, -1, 1, 1])
+                              matrix = M @ matrix @ M
                         
-                        # Check for Coordinate Conversion (RAS -> LPS)
-                        # The pose matrix in JSON is likely in the same coordinate system as the config
-                        ext_coord = self.viz.config.get('external_config_coordinate', 'LPS')
-                        if ext_coord == 'RAS':
-                            # T_lps = M @ T_ras @ M
-                            M = np.diag([-1, -1, 1, 1])
-                            matrix = M @ matrix @ M
-                        
-                        obj.local_transform.data = matrix
-                        
-                        # Apply
-                        obj.update_transform(self.viz.transform_map)
-                        updated_count += 1
-                        
+                         obj.local_transform.data = matrix
+                         obj.update_transform(self.viz.transform_map)
+                         updated_count += 1
             except Exception as e:
-                logging.error(f"Error applying pose from {filename}: {e}")
+                 logging.error(f"Error applying pose from {filename}: {e}")
+                 
+        logging.info(f"Updated {updated_count} transforms for {full_pose_name}")
         
-        logging.info(f"Updated {updated_count} transforms for pose {pose_name}")
-        
-        # --- DEBUG: Print Geometries ---
-        print("\n=== Geometry Debug (World Coordinates) ===")
-        
-        # Helper to get pos
-        def get_pos(name):
-            if name in self.viz.object_map:
-                p = self.viz.object_map[name].global_transform.t
-                return f"[{p[0]:.2f}, {p[1]:.2f}, {p[2]:.2f}]"
-            return "N/A"
-            
-        print(f"CArmS (Source):   {get_pos('CArmSource')}")
-        print(f"CArmI (Isocenter):{get_pos('CArmIsocenter')}")
-        print(f"CArmD (Detector): {get_pos('CArmDetector')}")
-        
-        # Anatomy
-        if 'CTvolume' in self.viz.object_map:
-            ct = self.viz.object_map['CTvolume']
-            print(f"CT Origin:        {get_pos('CTvolume')}")
-            
-            # Print Volume Center (Segmentation Centroid in World)
-            if ct.segmentation_mesh:
-                # Mesh Center in Local Frame
-                local_center = np.array(ct.segmentation_mesh.center)
-                # Transform to Global
-                if ct._cached_global_transform is not None:
-                     M = ct._cached_global_transform.data
-                else: 
-                     M = ct.global_transform.data
-                     
-                world_center = (M @ np.append(local_center, 1.0))[:3]
-                print(f"Volume Center:    [{world_center[0]:.2f}, {world_center[1]:.2f}, {world_center[2]:.2f}]")
-            
-            # Print PEL-c if available
-            pel_c = ct.get_landmark_world_position('PEL-c')
-            if pel_c is not None:
-                print(f"PEL-c Landmark:   [{pel_c[0]:.2f}, {pel_c[1]:.2f}, {pel_c[2]:.2f}]")
-            else:
-                 print("PEL-c Landmark:   Not Found")
-        
-        print("========================================\n")
-        # -------------------------------
-
         self.viz.plotter.render()

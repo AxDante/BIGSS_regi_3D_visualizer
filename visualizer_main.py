@@ -473,6 +473,7 @@ class SE3Visualizer:
              self.recording_dir = os.path.abspath(self.recording_dir)
 
         self.recording_status_callback = None
+        self.current_recording_filename = None
         
         # Ensure recording directory exists
         if not os.path.exists(self.recording_dir):
@@ -761,6 +762,7 @@ class SE3Visualizer:
                 # Open movie file
                 self.plotter.open_movie(filename, framerate=30)
                 self.is_recording = True
+                self.current_recording_filename = filename
                 logging.info(f"Started recording to {filename}")
                 
                 if self.recording_status_callback:
@@ -792,7 +794,7 @@ class SE3Visualizer:
                 logging.info("Stopped recording")
                 
                 if self.recording_status_callback:
-                    self.recording_status_callback(False, None)
+                    self.recording_status_callback(False, self.current_recording_filename)
                     
             except Exception as e:
                 logging.error(f"Failed to stop recording: {e}")
