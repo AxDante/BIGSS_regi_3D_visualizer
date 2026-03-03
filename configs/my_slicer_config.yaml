@@ -1,0 +1,26 @@
+logging_level: INFO
+recording_dir: visualizer_outputs/recordings
+frames:
+- name: InjectorDevice
+  abbreviation: ID
+  type: model
+  paths:
+    ct: /home/pingcheng/bigss/bisss-surgery-3d-visualizer/example/slicer_scenes/scene_pelvis_and_device/injector_device_CT.nii.gz
+    model: /home/pingcheng/bigss/bisss-surgery-3d-visualizer/example/meta_data/injector_device/injector_device_model.stl
+    landmarks: /home/pingcheng/bigss/bisss-surgery-3d-visualizer/example/slicer_scenes/scene_pelvis_and_device/injector_device_3d_landmarks.fcsv
+- name: Case108831
+  abbreviation: C
+  type: model
+  paths:
+    ct: /home/pingcheng/bigss/bisss-surgery-3d-visualizer/example/slicer_scenes/scene_pelvis_and_device/case-108831_ct.nii.gz
+    segmentation: /home/pingcheng/bigss/bisss-surgery-3d-visualizer/example/slicer_scenes/scene_pelvis_and_device/case-108831_seg.nii.gz.seg.nrrd
+    landmarks: /home/pingcheng/bigss/bisss-surgery-3d-visualizer/example/slicer_scenes/scene_pelvis_and_device/case-108831_landmarks.fcsv
+transforms:
+- name: World_from_InjectorDevice
+  parent: World
+  child: InjectorDevice
+  initial_transform:
+  - [1.0, 0.0, 0.0, -41.0]
+  - [0.0, 0.841511, 0.54024, 900.0]
+  - [0.0, -0.54024, 0.841511, 771.0]
+  - [0.0, 0.0, 0.0, 1.0]

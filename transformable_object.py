@@ -22,7 +22,7 @@ class TransformableObject:
         
         # --- Value Validation ---
         valid_mesh_exts = ('.stl', '.ply', '.obj', '.vtp')
-        valid_vol_exts = ('.nii', '.nii.gz')
+        valid_vol_exts = ('.nii', '.nii.gz', '.nrrd', '.seg.nrrd')
 
         # Validate Mesh Path
         if mesh_path:
@@ -117,6 +117,7 @@ class TransformableObject:
         
         if mesh_path and os.path.exists(mesh_path):
             mesh_data = load_mesh(mesh_path, origin=ct_origin)
+            logging.info(f"[{self.name}] Loaded model from {os.path.basename(mesh_path)}")
             self.mesh = mesh_data['mesh']
             # Transform mesh to Local Frame
             self.mesh.transform(world_to_local, inplace=True)
@@ -187,8 +188,8 @@ class TransformableObject:
             logging.debug(f"[{self.name}] Segmentation Coordinate System: RAS (converted to LPS)")
             logging.debug(f"[{self.name}] Loaded segmentation with labels: {seg_data['labels']}")
             
-            # Determine label: use provided label or default to 1
-            target_label = segmentation_label if segmentation_label is not None else 1
+            # Determine label: use provided label or default to 'all'
+            target_label = segmentation_label if segmentation_label is not None else 'all'
             logging.info(f"[{self.name}] Using segmentation label: {target_label}")
 
             # Convert to mesh (World Coordinates)
@@ -204,6 +205,9 @@ class TransformableObject:
             self._create_segmentation_actor()
             self._update_segmentation_transform()
             
+        # Initial Visibility Pass
+        self.set_show_model(self.show_model)
+
         # Initial Update
         self.update_transform()
         

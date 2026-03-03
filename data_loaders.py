@@ -29,8 +29,19 @@ def load_ct_volume(ct_path):
             - 'origin': image origin (x, y, z)
             - 'spacing': voxel spacing (x, y, z)
     """
-    img = nib.load(ct_path)
-    affine = img.affine
+    if str(ct_path).lower().endswith('.nrrd'):
+        import SimpleITK as sitk
+        itk_img = sitk.ReadImage(str(ct_path))
+        data = sitk.GetArrayFromImage(itk_img).T
+        direction = np.array(itk_img.GetDirection()).reshape(3, 3)
+        spacing = np.diag(itk_img.GetSpacing())
+        affine = np.eye(4)
+        affine[:3, :3] = direction @ spacing
+        affine[:3, 3] = itk_img.GetOrigin()
+    else:
+        img = nib.load(ct_path)
+        affine = img.affine
+        data = img.get_fdata()
     
     # Check orientation
     orientation = nib.orientations.aff2axcodes(affine)
@@ -43,13 +54,13 @@ def load_ct_volume(ct_path):
         affine = conversion @ affine
     
     origin = affine[:3, 3]
-    spacing = np.abs(np.diag(affine[:3, :3]))
+    spacing_diag = np.abs(np.diag(affine[:3, :3]))
     
     return {
-        'data': img.get_fdata(),
+        'data': data,
         'affine': affine,
         'origin': origin,
-        'spacing': spacing
+        'spacing': spacing_diag
     }
 
 
@@ -68,8 +79,19 @@ def load_segmentation(seg_path):
             - 'spacing': voxel spacing (x, y, z)
             - 'labels': unique label values in the segmentation
     """
-    img = nib.load(seg_path)
-    affine = img.affine
+    if str(seg_path).lower().endswith('.nrrd'):
+        import SimpleITK as sitk
+        itk_img = sitk.ReadImage(str(seg_path))
+        data = sitk.GetArrayFromImage(itk_img).T
+        direction = np.array(itk_img.GetDirection()).reshape(3, 3)
+        spacing = np.diag(itk_img.GetSpacing())
+        affine = np.eye(4)
+        affine[:3, :3] = direction @ spacing
+        affine[:3, 3] = itk_img.GetOrigin()
+    else:
+        img = nib.load(seg_path)
+        affine = img.affine
+        data = img.get_fdata()
     
     # Check orientation
     orientation = nib.orientations.aff2axcodes(affine)
@@ -81,15 +103,14 @@ def load_segmentation(seg_path):
         affine = conversion @ affine
     
     origin = affine[:3, 3]
-    spacing = np.abs(np.diag(affine[:3, :3]))
-    data = img.get_fdata()
+    spacing_diag = np.abs(np.diag(affine[:3, :3]))
     
     return {
         'data': data,
         'affine': affine,
         'origin': origin,
-        'spacing': spacing,
-        'labels': np.unique(data[data > 0])  # Non-zero labels
+        'spacing': spacing_diag,
+        'labels': [int(l) for l in np.unique(data[data > 0])]  # Non-zero labels
     }
 
 
@@ -107,7 +128,10 @@ def segmentation_to_mesh(seg_data, affine, label=1, reduction=0.5):
         PyVista mesh in World Coordinates
     """
     # Create binary mask for the specified label
-    binary_mask = (seg_data == label).astype(np.float32)
+    if label == 'all':
+        binary_mask = (seg_data > 0).astype(np.float32)
+    else:
+        binary_mask = (seg_data == label).astype(np.float32)
     
     # Create PyVista ImageData in VOXEL coordinates (origin=0, spacing=1)
     grid = pv.ImageData()

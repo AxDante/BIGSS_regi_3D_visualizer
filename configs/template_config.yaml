@@ -1,0 +1,195 @@
+# =========================================================================================
+# BiGSS 3D Visualizer Template Configuration File
+# =========================================================================================
+# This file serves as a comprehensive template demonstrating all available configuration
+# options for the BiGSS 3D Visualizer. You can copy this file and modify/uncomment the 
+# sections you need.
+
+# -----------------------------------------------------------------------------------------
+# Global Settings
+# -----------------------------------------------------------------------------------------
+
+# Logging Level: Controls the verbosity of console output. (DEBUG, INFO, WARNING, ERROR)
+logging_level: INFO
+
+# Recording Directory: Where screen recordings (mp4) will be saved when you press 'r'
+recording_dir: "visualizer_outputs/recordings"
+
+# External Config Support: You can load a modular 'scene_structure.yaml' from another dir.
+# external_config_dir: "path/to/another/folder"
+# external_config_coordinate: "LPS" # Set to "RAS" to convert Slicer external transforms
+
+# -----------------------------------------------------------------------------------------
+# Frames (Objects)
+# -----------------------------------------------------------------------------------------
+# Defines the objects (models, images, or virtal coordinate frames) in the scene.
+# Every object exists as a node in the SE(3) kinematic tree.
+
+frames:
+  # ---------------------------------------------------
+  # Example 1: A standard 3D Model with Segmentation
+  # ---------------------------------------------------
+  - name: ExamplePhantom
+    abbreviation: P
+    type: model        # 'model' (default), 'virtual', or 'basic_shapes'
+    movable: true      # If true, you can rotate/translate this object via the UI Control Panel
+    # Optional explicitly loaded transform on startup (Identity by default)
+    # initial_transform:
+    #   - [ 1.0,  0.0,  0.0,  0.0]
+    #   - [ 0.0,  1.0,  0.0,  0.0]
+    #   - [ 0.0,  0.0,  1.0,  0.0]
+    #   - [ 0.0,  0.0,  0.0,  1.0]
+    
+    # Define file paths to automatically load associated data
+    paths:
+      # The 3D surface mesh (STL, PLY, OBJ, VTP)
+      model: "example/meta_data/phantom/lumbar_phantom_model.stl"
+      
+      # The 3D labelmap segmentation (NII, NII.GZ, NRRD, SEG.NRRD)
+      # Tip: Generates a 3D surface using Marching Cubes algorithm.
+      segmentation: "example/meta_data/phantom/lumbar_phantom_CT_seg.nii.gz"
+      
+      # 3D Fiducials/Points (FCSV, TXT)
+      landmarks: "example/meta_data/phantom/lumbar_phantom_3d_landmarks.fcsv"
+      
+      # Original CT Volume (NII, NII.GZ, NRRD) (Mainly used for origin alignment if needed)
+      ct: "example/meta_data/phantom/lumbar_phantom_CT.nii.gz"
+
+    # Set which label inside the segmentation volume to generate a mesh for.
+    # Set to 'all' to union all non-zero labels into a single mesh (default).
+    # segmentation_label: all
+    # segmentation_label: 1
+    
+    # Complete list of appearance overrides for this object
+    visual_settings:
+      segmentation_color: "lightgray"
+      segmentation_opacity: 0.5
+      landmark_label_font_size: 12
+      landmark_label_color: "lightgray"
+      landmark_point_color: "red"
+      landmark_point_opacity: 1.0
+      landmark_point_size: 2.0
+      frame_transform_color: "lightgreen" # The color of the arrow pointing to this frame
+      frame_label_color: "white"          # The color of the P label text
+      frame_label_size: 14
+
+  # ---------------------------------------------------
+  # Example 2: A Virtual Coordinate Frame
+  # ---------------------------------------------------
+  # Virtual frames do not have a physical 3D Mesh. They act as invisible anchor
+  # points in space, useful for establishing tool tips, entry points, or camera sources.
+  - name: ExampleEntryPoint
+    abbreviation: EP
+    type: virtual
+    movable: false
+
+  # ---------------------------------------------------
+  # Example 3: Basic Shapes (Generated parametrically)
+  # ---------------------------------------------------
+  # - name: BoundingBox
+  #   abbreviation: BOX
+  #   type: basic_shapes
+  #   shape: box
+  #   parameters:
+  #     size: [100, 100, 100] # Dimensions in millimeters
+  #     color: "yellow"
+  #     opacity: 0.3
+
+
+# -----------------------------------------------------------------------------------------
+# Transforms (Kinematic Chain)
+# -----------------------------------------------------------------------------------------
+# Defines how the frames are connected to each other. Every frame must eventually trace
+# back up to "World". Transform names follow the convention: Parent_from_Child
+
+transforms:
+  # Connecting the Phantom directly to World. (World is a built-in immovable root frame)
+  - name: World_from_ExamplePhantom
+    parent: World
+    child: ExamplePhantom
+    # A dependent root transform tracks optical tracking or streamed files if configured
+    # type: dependent 
+
+  # Setting an Entry Point relative to the Phantom using a constant matrix
+  - name: ExamplePhantom_from_ExampleEntryPoint
+    parent: ExamplePhantom
+    child: ExampleEntryPoint
+    initial_transform:
+      - [ 1.0,  0.0,  0.0,  50.0]
+      - [ 0.0,  1.0,  0.0,  20.0]
+      - [ 0.0,  0.0,  1.0,  10.0]
+      - [ 0.0,  0.0,  0.0,  1.0]
+
+  # Dynamic Transform: Subscribes to an annotation or streamed file to update in real-time
+  # - name: W_from_RobotTip
+  #   parent: World
+  #   child: RobotTip
+  #   dynamic: true
+  #   annotation_name: some_annotation_tracker
+  #   actor_name: traj_1
+
+  # Streamed transform from a file
+  # - name: World_from_OpticalTracker
+  #   parent: World
+  #   child: OpticalTracker
+  #   path: "/path/to/streamed_transform.txt"
+
+  # Kinematic Constraints: Programmatically force this matrix using an equation of other frames
+  # - name: World_from_Camera
+  #   parent: World
+  #   child: Camera
+  #   constraint: "World_from_ExamplePhantom @ inv(ExamplePhantom_from_ExampleEntryPoint)"
+
+
+# -----------------------------------------------------------------------------------------
+# Reference Planes
+# -----------------------------------------------------------------------------------------
+# Transparent 2D planes used for slicing visually, or simulating X-Ray detector faces.
+
+reference_planes:
+  - name: MyReferencePlane
+    parent: ExampleEntryPoint  # The frame defining the center/orientation of the plane
+    width: 300                 # Plane width in mm
+    length: 300                # Plane length in mm
+    color: "blue"
+    opacity: 0.3
+    dynamic: false             # Set true if plane size updates dynamically from an annotation
+
+
+# -----------------------------------------------------------------------------------------
+# Custom Vectors
+# -----------------------------------------------------------------------------------------
+# Draw lines between coordinate frames or specific loaded landmarks.
+
+vectors:
+  - name: VectorPhantomTip
+    parent: ExamplePhantom         # Origin of the drawn vector
+    landmark_label: "Target_1"     # The specific landmark point to point at (if string)
+    landmark_object: ExamplePhantom # The frame that owns the above landmark
+
+
+# -----------------------------------------------------------------------------------------
+# Annotations (Live Streaming Trackers)
+# -----------------------------------------------------------------------------------------
+# Read streaming coordinate data generated by Slicer, external apps, or trackers.
+
+annotations:
+  # Streamed Polygons/Lines
+  # - name: slicer_dynamic_trajectory_annotation
+  #   path: "/tmp/slicer_surgery_planner_points.txt"
+  #   type: vector
+  #   parent: ExamplePhantom
+  #   dynamic: true
+  #   update_frequency: 1 # Refresh rate in hz
+  #   landmarks:
+  #     - name: traj_1
+  #       start: Entry_1
+  #       end: Target_1
+
+  # Streamed Planes
+  # - name: slicer_dynamic_reference_plane_annotation
+  #   path: "/tmp/slicer_surgery_planner_planes.txt"
+  #   type: reference_plane
+  #   dynamic: true
+  #   update_frequency: 1
+  #   parent: ExamplePhantom

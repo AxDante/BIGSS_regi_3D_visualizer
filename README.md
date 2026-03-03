@@ -28,6 +28,7 @@ This package relies on a refactored version of the `KilleenGeo` package develope
 ## Key Scripts
 
 - **`visualizer_main.py`**: Interactive PyVista-based visualizer. Supports hierarchical transforms, NIfTI models, and basic shapes.
+- **`generate_config_from_slicer.py`**: Converts 3D Slicer MRML scenes into YAML configuration files by grouping nodes and extracting linear transforms automatically.
 
 ## Configuration Files
 
@@ -45,6 +46,12 @@ python3 visualizer_main.py configs/config_test.yaml
 Visualize the Phantom and Device setup.
 ```bash
 python3 visualizer_main.py configs/config.yaml
+```
+
+### 3. Generate Config from Slicer Scene
+Automatically bundle Volumes, Segmentations, Models, and Transforms from a Slicer `.mrml` namespace into a BiGSS ready `.yaml` config:
+```bash
+python3 generate_config_from_slicer.py example/slicer_scenes/scene_pelvis_and_device/2026-02-27-Scene.mrml -o configs/my_slicer_config.yaml
 ```
 
 ### Workflow Overview
