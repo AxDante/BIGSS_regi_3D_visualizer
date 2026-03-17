@@ -26,10 +26,6 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 elide: Label.ElideRight
             }
-            Button {
-                text: "Refresh"
-                onClicked: visualizerController.refreshLists()
-            }
         }
 
         TabBar {
@@ -58,38 +54,47 @@ ApplicationWindow {
                         model: visualizerController.frames
                         delegate: Frame {
                             Layout.fillWidth: true
+                            padding: 8
                             ColumnLayout {
-                                width: parent.width
+                                Layout.fillWidth: true
                                 RowLayout {
                                     Layout.fillWidth: true
                                     Label {
                                         text: modelData.abbr.length > 0 ? (modelData.name + " (" + modelData.abbr + ")") : modelData.name
                                         Layout.fillWidth: true
                                         elide: Label.ElideRight
+                                        font.bold: true
                                     }
-                                    Switch {
-                                        text: "Visible"
+                                    ToolButton {
+                                        checkable: true
                                         checked: modelData.visible
+                                        text: checked ? "Hide" : "Show"
+                                        icon.name: checked ? "view-visible" : "view-hidden"
+                                        display: AbstractButton.TextBesideIcon
                                         onToggled: visualizerController.setObjectVisible(modelData.name, checked)
                                     }
                                 }
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    Switch {
+                                    spacing: 8
+                                    ToolButton {
+                                        checkable: true
                                         text: "Frame"
                                         checked: modelData.showFrame
                                         onToggled: visualizerController.setFrameVisible(modelData.name, checked)
                                     }
-                                    Switch {
+                                    ToolButton {
+                                        checkable: true
                                         text: "Model"
-                                        checked: modelData.showModel
                                         enabled: modelData.hasModel
+                                        checked: modelData.showModel
                                         onToggled: visualizerController.setModelVisible(modelData.name, checked)
                                     }
-                                    Switch {
+                                    ToolButton {
+                                        checkable: true
                                         text: "Landmarks"
-                                        checked: modelData.showLandmarks
                                         enabled: modelData.hasLandmarks
+                                        checked: modelData.showLandmarks
                                         onToggled: visualizerController.setLandmarksVisible(modelData.name, checked)
                                     }
                                 }
@@ -120,100 +125,156 @@ ApplicationWindow {
                     }
 
                     Frame {
+                        id: translationCard
                         Layout.fillWidth: true
+                        padding: 8
+                        property bool editingTranslation: false
                         ColumnLayout {
                             Layout.fillWidth: true
                             Label { text: "Translation (mm)" }
                             RowLayout {
                                 Layout.fillWidth: true
+                                spacing: 6
                                 TextField {
                                     id: txField
-                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 72
                                     text: Number(visualizerController.tx).toFixed(2)
+                                    readOnly: !translationCard.editingTranslation
                                     inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                    placeholderText: "X"
+                                    background: Rectangle {
+                                        color: txField.readOnly ? "#f5f5f5" : "#ffffff"
+                                        border.color: txField.readOnly ? "#d6d6d6" : "#b0b0b0"
+                                        radius: 4
+                                    }
                                 }
-                                Button {
-                                    text: "Set X"
-                                    enabled: visualizerController.canEdit
-                                    onClicked: visualizerController.setTranslation("x", parseFloat(txField.text))
-                                }
-                            }
-                            RowLayout {
-                                Layout.fillWidth: true
                                 TextField {
                                     id: tyField
-                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 72
                                     text: Number(visualizerController.ty).toFixed(2)
+                                    readOnly: !translationCard.editingTranslation
                                     inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                    placeholderText: "Y"
+                                    background: Rectangle {
+                                        color: tyField.readOnly ? "#f5f5f5" : "#ffffff"
+                                        border.color: tyField.readOnly ? "#d6d6d6" : "#b0b0b0"
+                                        radius: 4
+                                    }
                                 }
-                                Button {
-                                    text: "Set Y"
-                                    enabled: visualizerController.canEdit
-                                    onClicked: visualizerController.setTranslation("y", parseFloat(tyField.text))
-                                }
-                            }
-                            RowLayout {
-                                Layout.fillWidth: true
                                 TextField {
                                     id: tzField
-                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 72
                                     text: Number(visualizerController.tz).toFixed(2)
+                                    readOnly: !translationCard.editingTranslation
                                     inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                    placeholderText: "Z"
+                                    background: Rectangle {
+                                        color: tzField.readOnly ? "#f5f5f5" : "#ffffff"
+                                        border.color: tzField.readOnly ? "#d6d6d6" : "#b0b0b0"
+                                        radius: 4
+                                    }
+                                }
+                                Item { Layout.fillWidth: true }
+                                Button {
+                                    text: "Edit"
+                                    enabled: visualizerController.canEdit && !translationCard.editingTranslation
+                                    onClicked: {
+                                        translationCard.editingTranslation = true
+                                        txField.text = Number(visualizerController.tx).toFixed(2)
+                                        tyField.text = Number(visualizerController.ty).toFixed(2)
+                                        tzField.text = Number(visualizerController.tz).toFixed(2)
+                                    }
                                 }
                                 Button {
-                                    text: "Set Z"
-                                    enabled: visualizerController.canEdit
-                                    onClicked: visualizerController.setTranslation("z", parseFloat(tzField.text))
+                                    text: "Apply"
+                                    enabled: visualizerController.canEdit && translationCard.editingTranslation
+                                    onClicked: {
+                                        const x = parseFloat(txField.text)
+                                        const y = parseFloat(tyField.text)
+                                        const z = parseFloat(tzField.text)
+                                        if (!isNaN(x)) visualizerController.setTranslation("x", x)
+                                        if (!isNaN(y)) visualizerController.setTranslation("y", y)
+                                        if (!isNaN(z)) visualizerController.setTranslation("z", z)
+                                        translationCard.editingTranslation = false
+                                    }
                                 }
                             }
                         }
                     }
 
                     Frame {
+                        id: rotationCard
                         Layout.fillWidth: true
+                        padding: 8
+                        property bool editingRotation: false
                         ColumnLayout {
                             Layout.fillWidth: true
                             Label { text: "Rotation (deg)" }
                             RowLayout {
                                 Layout.fillWidth: true
+                                spacing: 6
                                 TextField {
                                     id: rollField
-                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 72
                                     text: Number(visualizerController.roll).toFixed(1)
+                                    readOnly: !rotationCard.editingRotation
                                     inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                    placeholderText: "Roll"
+                                    background: Rectangle {
+                                        color: rollField.readOnly ? "#f5f5f5" : "#ffffff"
+                                        border.color: rollField.readOnly ? "#d6d6d6" : "#b0b0b0"
+                                        radius: 4
+                                    }
                                 }
-                                Button {
-                                    text: "Set Roll"
-                                    enabled: visualizerController.canEdit
-                                    onClicked: visualizerController.setRotation("roll", parseFloat(rollField.text))
-                                }
-                            }
-                            RowLayout {
-                                Layout.fillWidth: true
                                 TextField {
                                     id: pitchField
-                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 72
                                     text: Number(visualizerController.pitch).toFixed(1)
+                                    readOnly: !rotationCard.editingRotation
                                     inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                    placeholderText: "Pitch"
+                                    background: Rectangle {
+                                        color: pitchField.readOnly ? "#f5f5f5" : "#ffffff"
+                                        border.color: pitchField.readOnly ? "#d6d6d6" : "#b0b0b0"
+                                        radius: 4
+                                    }
                                 }
-                                Button {
-                                    text: "Set Pitch"
-                                    enabled: visualizerController.canEdit
-                                    onClicked: visualizerController.setRotation("pitch", parseFloat(pitchField.text))
-                                }
-                            }
-                            RowLayout {
-                                Layout.fillWidth: true
                                 TextField {
                                     id: yawField
-                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 72
                                     text: Number(visualizerController.yaw).toFixed(1)
+                                    readOnly: !rotationCard.editingRotation
                                     inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                    placeholderText: "Yaw"
+                                    background: Rectangle {
+                                        color: yawField.readOnly ? "#f5f5f5" : "#ffffff"
+                                        border.color: yawField.readOnly ? "#d6d6d6" : "#b0b0b0"
+                                        radius: 4
+                                    }
+                                }
+                                Item { Layout.fillWidth: true }
+                                Button {
+                                    text: "Edit"
+                                    enabled: visualizerController.canEdit && !rotationCard.editingRotation
+                                    onClicked: {
+                                        rotationCard.editingRotation = true
+                                        rollField.text = Number(visualizerController.roll).toFixed(1)
+                                        pitchField.text = Number(visualizerController.pitch).toFixed(1)
+                                        yawField.text = Number(visualizerController.yaw).toFixed(1)
+                                    }
                                 }
                                 Button {
-                                    text: "Set Yaw"
-                                    enabled: visualizerController.canEdit
-                                    onClicked: visualizerController.setRotation("yaw", parseFloat(yawField.text))
+                                    text: "Apply"
+                                    enabled: visualizerController.canEdit && rotationCard.editingRotation
+                                    onClicked: {
+                                        const r = parseFloat(rollField.text)
+                                        const p = parseFloat(pitchField.text)
+                                        const y = parseFloat(yawField.text)
+                                        if (!isNaN(r)) visualizerController.setRotation("roll", r)
+                                        if (!isNaN(p)) visualizerController.setRotation("pitch", p)
+                                        if (!isNaN(y)) visualizerController.setRotation("yaw", y)
+                                        rotationCard.editingRotation = false
+                                    }
                                 }
                             }
                         }
@@ -227,6 +288,22 @@ ApplicationWindow {
                             text: visualizerController.matrixText
                             readOnly: true
                             wrapMode: Text.Wrap
+                        }
+                    }
+
+                    Connections {
+                        target: visualizerController
+                        function onSelectionChanged() {
+                            if (!translationCard.editingTranslation) {
+                                txField.text = Number(visualizerController.tx).toFixed(2)
+                                tyField.text = Number(visualizerController.ty).toFixed(2)
+                                tzField.text = Number(visualizerController.tz).toFixed(2)
+                            }
+                            if (!rotationCard.editingRotation) {
+                                rollField.text = Number(visualizerController.roll).toFixed(1)
+                                pitchField.text = Number(visualizerController.pitch).toFixed(1)
+                                yawField.text = Number(visualizerController.yaw).toFixed(1)
+                            }
                         }
                     }
                 }

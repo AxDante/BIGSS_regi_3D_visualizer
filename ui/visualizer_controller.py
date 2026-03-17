@@ -110,7 +110,15 @@ class VisualizerController(QObject):
         self.listsChanged.emit()
         self._build_frames()
         if not self._selected_transform and self._transform_names:
-            self._selected_transform = self._transform_names[0]
+            chosen = None
+            for t in self._viz.config.get("transforms", []):
+                if t.get("type") == "dependent":
+                    continue
+                obj = self._viz.object_map.get(t.get("child"))
+                if obj and obj.movable:
+                    chosen = t.get("name")
+                    break
+            self._selected_transform = chosen or self._transform_names[0]
             self._sync_selection()
             self.selectionChanged.emit()
 
