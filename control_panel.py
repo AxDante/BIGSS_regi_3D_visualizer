@@ -2450,22 +2450,34 @@ class ControlPanel:
             
         self.pose_json_dir = ext_dir
         
+        # Prefer dedicated poses subdir if present
+        poses_dir = os.path.join(ext_dir, "poses")
+        if os.path.exists(poses_dir):
+            ext_dir = poses_dir
+
         # Scan for JSON files
         json_files = glob.glob(os.path.join(ext_dir, "*.json"))
         if not json_files:
-            ttk.Label(frame, text="No .json files found in external directory.", foreground="gray").pack(pady=20)
+            ttk.Label(frame, text="No .json files found in poses directory.", foreground="gray").pack(pady=20)
             return
 
-        # Read the first JSON to get list of poses
+        # Read all JSONs to collect pose names, ignore non-pose JSONs
         raw_pose_names = []
-        try:
-            with open(json_files[0], 'r') as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    raw_pose_names = [item.get('pose_name') for item in data if 'pose_name' in item]
-        except Exception as e:
-            logging.error(f"Error reading poses from {json_files[0]}: {e}")
-            ttk.Label(frame, text=f"Error reading JSONs: {e}", foreground="red").pack(pady=20)
+        valid_pose_files = []
+        for jf in json_files:
+            try:
+                with open(jf, 'r') as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        names = [item.get('pose_name') for item in data if 'pose_name' in item]
+                        if names:
+                            raw_pose_names.extend(names)
+                            valid_pose_files.append(jf)
+            except Exception as e:
+                logging.error(f"Error reading poses from {jf}: {e}")
+
+        if not valid_pose_files:
+            ttk.Label(frame, text="No pose JSONs found (missing pose_name).", foreground="gray").pack(pady=20)
             return
             
         if not raw_pose_names:
@@ -2519,7 +2531,7 @@ class ControlPanel:
         self.step_combo.bind('<<ComboboxSelected>>', self.on_step_combo_changed)
         
         # Info Label
-        self.pose_info_label = ttk.Label(frame, text=f"Found {len(sorted_bases)} poses in {len(json_files)} files.", foreground="gray")
+        self.pose_info_label = ttk.Label(frame, text=f"Found {len(sorted_bases)} poses in {len(valid_pose_files)} files.", foreground="gray")
         self.pose_info_label.pack(pady=10)
 
         # --- Default Initialization: Pose 000 Step 00 ---
