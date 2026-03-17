@@ -6,6 +6,9 @@ import yaml
 import logging
 import re
 from datetime import datetime
+from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import QQmlApplicationEngine
 
 # Configure logging
 # Default to INFO, will be updated after config load
@@ -14,7 +17,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from transformable_object import TransformableObject
-from control_panel import ControlPanel
+from ui.visualizer_controller import VisualizerController
 from data_loaders import load_segmentation, load_landmarks
 import geo.core as kg
 import time 
@@ -1844,31 +1847,17 @@ class SE3Visualizer:
         self.update_annotations()
 
     def show(self):
+        app = QGuiApplication(sys.argv)
+        engine = QQmlApplicationEngine()
 
-        # Create Control Panel
-        self.panel = ControlPanel(self)
-        
-        # Main Loop
-        def update_plotter():
-            # 1. Update Dynamic Inputs (Local Transforms)
-            self._update_dynamic_transforms() 
-            self._update_dynamic_annotations()
-            self._update_explicit_file_transforms() # <--- Added explicit file updates
-            
-            # 2. Update All Objects (Global Transforms & Actors)
-            for obj in self.objects:
-                obj.update_transform(self.transform_map)
-                
-            # 3. Update Dependent Visuals (Arrows, Planes, etc.)
-            self._update_dependent_transforms()
-            self.update_reference_planes()
-            self.update_custom_vectors()
-            self.update_annotations()
-            
-            # 4. Logging & Render
-            self.log_data() 
-            self.plotter.update()
-            self.panel.root.after(16, update_plotter) # ~60 FPS
+        controller = VisualizerController(self)
+        engine.rootContext().setContextProperty("visualizerController", controller)
+
+        qml_path = os.path.join(os.path.dirname(__file__), "qml", "main.qml")
+        engine.load(QUrl.fromLocalFile(qml_path))
+        if not engine.rootObjects():
+            logging.error("Failed to load QML UI.")
+            return
 
         # Add key binding for screenshot
         self.plotter.add_key_event('s', self.take_screenshot)
@@ -1877,20 +1866,38 @@ class SE3Visualizer:
         # Add key binding for logging
         self.plotter.add_key_event('l', self.toggle_logging)
         self.plotter.add_key_event('L', self.toggle_logging)
-        
+
         self.plotter.show(interactive_update=True)
-        
-        # Start update loop
-        update_plotter()
-        
-        # Start Tkinter loop (Blocking)
+
+        def update_plotter():
+            # 1. Update Dynamic Inputs (Local Transforms)
+            self._update_dynamic_transforms()
+            self._update_dynamic_annotations()
+            self._update_explicit_file_transforms()
+
+            # 2. Update All Objects (Global Transforms & Actors)
+            for obj in self.objects:
+                obj.update_transform(self.transform_map)
+
+            # 3. Update Dependent Visuals (Arrows, Planes, etc.)
+            self._update_dependent_transforms()
+            self.update_reference_planes()
+            self.update_custom_vectors()
+            self.update_annotations()
+
+            # 4. Logging & Render
+            self.log_data()
+            self.plotter.update()
+            controller.syncState()
+
+        timer = QTimer()
+        timer.timeout.connect(update_plotter)
+        timer.start(16)
+
         try:
-            self.panel.root.mainloop()
-        except KeyboardInterrupt:
-            pass
-        
-        # Close plotter when GUI closes
-        self.plotter.close()
+            app.exec()
+        finally:
+            self.plotter.close()
 
 
 if __name__ == "__main__":
